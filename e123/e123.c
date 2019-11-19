@@ -1,0 +1,117 @@
+/* Skriv ett program som tar bort alla kommentarer från ett C-program. Glöm
+   inte att hantera strängar inom cituationstecken eller teckenkonstanter rätt.
+   C-kommentarer kan inte nästas. */
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#define SLASH 8
+#define STAR 16
+#define IN_COMMENT 1
+#define ESCAPED 2
+#define IN_QUOTE 4
+#define NO_STATE 0
+#define IN_CHARLIT 32
+#define IN_CHARLITEND 64
+
+#define ERR(msg, i)\
+do {\
+fprintf(stderr,\
+ "Felaktig indata på rad %d kol. %d, abryter ... \n"\
+ "	Meddelande: \n"\
+ "	%s\n"\
+ "	Kod: %d\n"\
+ "	Källkodsfil: %s, rad:%d\n",\
+row, col, msg, i, __FILE__, __LINE__);\
+exit(1);\
+} while(0)
+
+/* Denna fil innehåller kommentarer som ska bort, så som denna. */
+main()
+{
+/* blabla
+ * bla bla */
+	int state = NO_STATE;
+	int c;
+	int col = 0;
+	int row = 1;
+	while ((c = getchar()) != EOF) {
+start:
+		if (c == '\n')
+			row++, col = 1;
+		else if (c == '\t')
+			col += 4;
+		else
+			col++;
+
+		if (state == NO_STATE) {
+			if (c == '/')
+				state = SLASH;
+			else if (c == '"') {
+				state = IN_QUOTE;
+				putchar('"');
+			} else if (c == '\'') {
+				putchar(c);
+				state = IN_CHARLIT;
+			} else
+				putchar(c);
+			continue;
+		} else if (state == SLASH) {
+			if (c == '*') {
+				state = IN_COMMENT;
+				continue;
+			} else {
+				state = NO_STATE;
+				putchar('/');
+				goto start; /* Låt inläst char behandlas igen */
+			}
+		} else if (state == IN_COMMENT) {
+			if (c == '*')
+				state |= STAR;
+			else if (c == '/')
+				state |= SLASH;
+			continue;
+		} else if (state == (IN_COMMENT | STAR)) {
+			if (c == '/') /* Inte lägre i en kommentar. */
+				state = NO_STATE;
+			else
+				state = IN_COMMENT;
+			continue;
+		} else if (state == (IN_COMMENT | SLASH)) {
+			/* '/''*' får inte finnas i kommentarer. */
+			if (c == '*') {
+				ERR("Kommentar börjar i kommentar", c);
+			}
+			state = IN_COMMENT;
+			continue;
+		} else if (state == IN_QUOTE) {
+			if (c == '\\') {
+				state |= ESCAPED;
+			} else if (c == '"')
+				state = NO_STATE;
+			putchar(c);
+			continue;
+		} else if (state == (IN_QUOTE | ESCAPED)) {
+			putchar(c);
+			state = IN_QUOTE;
+		} else if (state == IN_CHARLIT) {
+			if (c == '\\')
+				state |= ESCAPED;
+			putchar(c);
+		} else if (state == (IN_CHARLIT | ESCAPED)) {
+			state = IN_CHARLITEND;
+			putchar(c);
+		} else if (state == IN_CHARLITEND) {
+			if (c != '\'')
+				ERR("Character literal är för lång!", c);
+			else {
+				state = NO_STATE;
+				putchar(c);
+			}
+		} else ERR("BUGG", state);
+
+	}
+
+	return 0;
+
+}/* Flera *//*Kommentarer*/

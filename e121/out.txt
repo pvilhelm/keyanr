@@ -1,0 +1,8 @@
+a		b (två tabs	ska förbli två tabs)
+a		b (mellanslag ska bli två tabs)
+a		b (mellanslag och tab ska bli två tabs)
+a   b (för kort för en tab emellan)
+a	b (tab kvar)
+a	b (mellanslag	tab blir tab)
+a      b (mellanslag blir kvar)
+
