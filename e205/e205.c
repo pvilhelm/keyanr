@@ -1,5 +1,4 @@
-/* Skriv en alternativ version squeeze(s1, s2), som tar bort alla tecken i s1 som 
-   matchar något tecken i s2. */
+/* Första tecknet i s1 som motsvarar ett i s2 */
 
 #include <stdio.h>
 
