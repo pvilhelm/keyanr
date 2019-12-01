@@ -100,8 +100,11 @@ char out_buffer[BUF_SIZE];
 
 main(int argc, char **argv)
 {
-	expand(argv[1], out_buffer);
-	printf("%s", out_buffer);
+	if (argc == 2) {
+		expand(argv[1], out_buffer);
+		printf("%s", out_buffer);
+	} else
+		printf("Ange något att processa.");
 
 	return 0;
 }
