@@ -20,7 +20,7 @@
 #include <stdlib.h> /* for atof() */
 #include <math.h>
 #include <string.h>
-
+#include <ctype.h>
 
 #define VAR_NAME_MAXSIZE 12
 
@@ -52,11 +52,13 @@ typedef struct {
 } var_t;
 
 typedef struct {
-	char * str;
+	char *str;
 	int n_args;
 	double (*fnc_ptr)(void);
+	char *help;
 } fnc_dispath_t;
 
+double ans;
 
 char buf[BUFSIZE]; 	/* buffer for ungetch */
 int bufp = 0;		/* next free position in buf */
@@ -70,7 +72,6 @@ stack_node_t val[MAXVAL]; /* value stack */
 var_t vars[MAXVAR];
 int n_vars = 0;
 
-int getop(char []);
 void push(double);
 void push_node(stack_node_t node);
 void push_var(double f, char *s);
@@ -97,7 +98,6 @@ double peek(void); /* Returnerar toppen av stacken, eller noll om topp saknas. *
 double swap(void); /* Byter toppen av stacken med underliggade, eller ingenting om de saknas. */
 double dup(void); /* Kopierar toppen av stacken och lägger på stacken. */
 
-
 /* Lägg ihop op 1 och 2 och lägg på stacken. */
 double add(void)
 {
@@ -112,6 +112,20 @@ double sub(void)
 	double op2 = pop();
 	push(pop() - op2);
 
+	return 0.;
+}
+
+double fnc_less(void)
+{
+	double op2 = pop();
+	push(pop() < op2);
+	return 0.;
+}
+
+double fnc_more(void)
+{
+	double op2 = pop();
+	push(pop() > op2);
 	return 0.;
 }
 
@@ -283,6 +297,15 @@ double min(void)
 	return 0.;
 }
 
+double fnc_isequal(void)
+{
+	double op2 = pop();
+	double op1 = pop();
+	push(op2 == op1);
+	return 0.;
+}
+
+
 double fnc_assign(void)
 {
 	stack_node_t op2 = pop_node();
@@ -315,20 +338,52 @@ double fnc_assign(void)
 	return 0.;
 }
 
+double fnc_ans(void)
+{
+	push(ans);
+
+	return 0.;
+}
+
+
+
+double fnc_stack(void)
+{
+
+	for (int i = 0; i < sp - 1; i++)
+		printf("%2d:\t\t%.8g\n", sp - i, val[i].dval);
+
+	return 0.;
+}
+
+fnc_dispath_t fnc_arr[];
+
+double fnc_help(void)
+{
+	printf("Detta är en stack-kalkulator. De allra flesta operatorer och funktioner lägger"
+			" sitt svar på stacken. Variablers värden lagras separat, men referenser kan läggas på stacken.\n");
+	for (int i = 0; fnc_arr[i].fnc_ptr != 0; i++) {
+		printf("%s :    %s\n", fnc_arr[i].str, fnc_arr[i].help);
+	}
+
+	return 0.;
+}
 
 fnc_dispath_t fnc_arr[] =
 
 {
-		{"+", 2, add},
-		{"/", 2, divide},
-		{"%", 2, mod},
-		{"-", 2, sub},
-		{"*", 2, mul},
-		{"dup",0, dup},
-		{"swap",0, swap},
-		{"peek",0, peek},
-		{"max",2, max},
-		{"min",2, min},
+		{"+", 2, add, "Summera de två översta operanderna på stacken.\n"},
+		{"/", 2, divide, "Dela den näst översta operanden med den översta.\n"},
+		{"%", 2, mod, "Räkna ut resten efter att den näst översta operanden delats med den översta."},
+		{"-", 2, sub, "Den översta operanden minus den näst översta.\n"},
+		{"*", 2, mul, "Gångre de två översta operanderna.\n"},
+		{"<", 2, fnc_less, "Returnerar 1 om den näst översta operanden är mindre än den översta, annars 0.\n"},
+		{">", 2, fnc_more, "Returnerar 1 om den näst översta operanden är mindre än den översta, annars 0.\n"},
+		{"dup",0, dup,"Duplicera den översta operanden.\n"},
+		{"swap",0, swap, "Byt plats på de två översta operanderna.\n"},
+		{"peek",0, peek, "Värdet på den översta operanden.\n"},
+		{"max",2, max, "Det största av de två översta operanderna.\n"},
+		{"min",2, min, "Det minsta av de två översta operanderna.\n"},
 		{"sin",2, fnc_sin},
 		{"cos",2, fnc_cos},
 		{"tan",2, fnc_tan},
@@ -344,9 +399,16 @@ fnc_dispath_t fnc_arr[] =
 		{"pow",2, fnc_pow},
 		{"exp",1, fnc_exp},
 		{"sqrt",1, fnc_sqrt},
-		{":=", 2, fnc_assign},
+		{":=", 2, fnc_assign, "Definerar en variabel med värdet av den"
+				" översta operanden på stacken. Påverkar ej stacken.\n"},
+		{"=", 2, fnc_isequal, "Returnerar 1 om de två översta operanderna har samma värde, annars 0.\n"},
+		{"help", 1, fnc_help, "Skriver ut en hjältext.\n"},
+		{"ans", 0, fnc_ans, "Motsvarar det senaste resultat som skrevs ut på stdout.\n"},
+		{"stack",0, fnc_stack, "Skriver ut stackens värden.\n"},
 		{0,0,0},
 };
+
+
 
 /* reverse Polish calculator */
 main()
@@ -363,7 +425,9 @@ main()
 			process_token(token);
 			token = strtok(0, " ");
 		}
-		printf("top:\t\t%.8g\n", peek());
+		ans = peek();
+		if (!eof && line && *line) /* Skriv inte ut tomma rader som innehåller EOF. */
+			printf("\t\t%.8g\n", ans);
 	} while(!eof);
 
 	return 0;
@@ -486,60 +550,6 @@ int size(void)
 	return sp;
 }
 
-#include <ctype.h>
-
-int getch(void);
-void ungetch(int);
-/* getop: get next character or numeric operand */
-int getop(char s[])
-{
-	int i, c, c2;
-
-	while ((s[0] = c = getch()) == ' ' || c == '\t')
-		;
-	s[1] = '\0';
-	if (!isdigit(c) && c != '.' && c != '-' && c != '+')
-		return c;
-	/* not a number or minus plus */
-	i = 0;
-
-	c2 = getch();
-	ungetch(c2);
-	/* Se om det kommer ett tal efter '+-'-tecknet eller inte. */
-	if ((c == '+' || c == '-') && !isdigit(c2) && c2 != '.') {
-		/* Var en operator inte ett '+-'-tecken. */
-		return c;
-	}
-
-	if (isdigit(c) || c == '+' || c == '-') /* collect integer part */
-		while (isdigit(s[++i] = c = getch()))
-			;
-	if (c == '.') /* collect fraction part */
-		while (isdigit(s[++i] = c = getch()))
-			;
-	s[i] = '\0';
-	if (c != EOF)
-		ungetch(c);
-	return NUMBER;
-}
-
-/* get a (possibly pushed-back) character */
-int getch(void)
-{
-	return (bufp > 0) ? buf[--bufp] : getchar();
-}
-
-/* push character back on input */
-void ungetch(int c)
-{
-	if (bufp >= BUFSIZE)
-		printf("ungetch: för många tecken\n");
-	else
-		buf[bufp++] = c;
-}
-
-
-
 char *get_line(int *eof)
 {
 	char c;
@@ -577,6 +587,7 @@ enum number_state {
 	E,
 	ESIGN,
 	EDIGITS,
+	HEXDIGITS,
 };
 
 int char_in_str(char c, char *s)
@@ -623,6 +634,14 @@ int is_number_literal(char *tkn)
 				continue;
 			} else if (c == 'e' || c == 'E') {
 				state = E;
+				continue;
+			} else if (c == 'x' || c == 'X') {
+				state = HEXDIGITS;
+				continue;
+			}
+			return 0; /* Inte ett nummer. */
+		case HEXDIGITS:
+			if (isdigit(c) || char_in_str(tolower(c), "abcdef")) {
 				continue;
 			}
 			return 0; /* Inte ett nummer. */
@@ -709,11 +728,15 @@ void process_token(char *tkn)
 		}
 	}
 
-	/* Det är en variabel. */
+	/* Är det en variabel? */
 	{
-
-		push_var(0., tkn);
-		return;
+		int is_var = isalpha(*tkn);
+		for (char *ptr = tkn; *ptr != 0 && is_var; ptr++)
+			if (!isalnum(*ptr) && *ptr != '_') is_var = 0;
+		if (is_var) {
+			push_var(0., tkn);
+			return;
+		}
 	}
 
 	printf("process_token: token \"%s\" kan inte hanteras.\n", tkn);
@@ -726,7 +749,7 @@ void push_var(double f, char *s)
 	stack_node_t node = {};
 	node.dval = f;
 	node.type = VAR;
-	strncpy(node.name, s, VAR_NAME_MAXSIZE - 1);
+	my_strncpy(node.name, s, VAR_NAME_MAXSIZE - 1);
 
 	/*var_t var;
 	var.dval = f;
@@ -783,7 +806,7 @@ var_t *find_var(char *name)
 void define_var(char *name, double value)
 {
 	var_t var;
-	strncpy(var.name, name, VAR_NAME_MAXSIZE);
+	my_strncpy(var.name, name, VAR_NAME_MAXSIZE);
 	var.dval = value;
 	if (n_vars < MAXVAR)
 		vars[n_vars++] = var;
