@@ -106,9 +106,12 @@ void print_tree(tree_node_t *tn)
 	return;
 }
 
+
+
 int is_valid_char(char c)
 {
 	if (isalnum(c)) return 1;
+	if
 	else return 0;
 }
 
